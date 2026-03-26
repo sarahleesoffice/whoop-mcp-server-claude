@@ -10,6 +10,28 @@ import axios from 'axios';
 // In-memory session store (shared across warm lambda instances)
 const transports = new Map<string, SSEServerTransport>();
 
+function getWhoopEnv(primaryName: string, fallbackName: string) {
+  return process.env[primaryName] ?? process.env[fallbackName] ?? '';
+}
+
+function getWhoopAccessTokenFromCookie(cookieHeader?: string) {
+  if (!cookieHeader) return undefined;
+
+  const cookie = cookieHeader
+    .split(';')
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith('whoop_access_token='));
+
+  if (!cookie) return undefined;
+
+  const encodedToken = cookie.slice('whoop_access_token='.length);
+  try {
+    return decodeURIComponent(encodedToken);
+  } catch {
+    return encodedToken;
+  }
+}
+
 function buildWhoopClient(accessToken?: string) {
   const client = axios.create({
     baseURL: 'https://api.prod.whoop.com/developer/v2',
@@ -49,9 +71,9 @@ function createMcpServer() {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const clientId = process.env.WHOOP_CLIENT_ID ?? '';
-    const clientSecret = process.env.WHOOP_CLIENT_SECRET ?? '';
-    const redirectUri = process.env.WHOOP_REDIRECT_URI ?? '';
+    const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOP_CLIENT_ID');
+    const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOP_CLIENT_SECRET');
+    const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOP_REDIRECT_URI');
 
     try {
       const api = buildWhoopClient(whoopAccessToken);
@@ -169,6 +191,11 @@ function createMcpServer() {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
+    const cookieToken = getWhoopAccessTokenFromCookie(req.headers.cookie);
+    if (cookieToken) {
+      whoopAccessToken = cookieToken;
+    }
+
     // Establish SSE connection
     const transport = new SSEServerTransport('/api/mcp', res as unknown as import('http').ServerResponse);
     const server = createMcpServer();

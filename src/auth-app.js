@@ -12,9 +12,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const WHOOP_CONFIG = {
-  clientId: process.env.WHOOP_CLIENT_ID || 'your_client_id_here',
-  clientSecret: process.env.WHOOP_CLIENT_SECRET || 'your_client_secret_here',
-  redirectUri: process.env.WHOOP_REDIRECT_URI || 'http://localhost:3000/callback'
+  clientId: process.env.WHOOPCLIENTID || process.env.WHOOP_CLIENT_ID || 'your_client_id_here',
+  clientSecret: process.env.WHOOPCLIENTSECRET || process.env.WHOOP_CLIENT_SECRET || 'your_client_secret_here',
+  redirectUri: process.env.WHOOPREDIRECTURI || process.env.WHOOP_REDIRECT_URI || 'http://localhost:3000/callback'
 };
 
 const whoopClient = new WhoopApiClient(WHOOP_CONFIG);
