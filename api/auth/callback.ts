@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 
+const WHOOP_TOKEN_REDIRECT_URI = 'https://whoop-mcp-server-claude-x49e.vercel.app/api/auth/callback';
+
 function escapeHtml(value: string) {
   return value
     .replaceAll('&', '&amp;')
@@ -30,7 +32,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const clientId = process.env.WHOOPCLIENTID;
   const clientSecret = process.env.WHOOPCLIENTSECRET;
-  const redirectUri = process.env.WHOOPREDIRECTURI;
 
   const error = firstQueryValue(req.query.error);
   const errorDescription = firstQueryValue(req.query.error_description);
@@ -45,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .send(htmlPage('WHOOP OAuth error', '<h1 class="error">WHOOP OAuth error</h1><p><strong>Error:</strong> ' + escapeHtml(error) + '</p><p><strong>Description:</strong> ' + escapeHtml(errorDescription ?? 'No description provided') + '</p><p><strong>State:</strong> ' + escapeHtml(state ?? 'not provided') + '</p>'));
   }
 
-  if (!clientId || !clientSecret || !redirectUri) {
+  if (!clientId || !clientSecret) {
     return res
       .status(500)
       .setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -67,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client_secret: clientSecret,
       code,
       grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
+      redirect_uri: WHOOP_TOKEN_REDIRECT_URI,
     });
 
     const response = await axios.post('https://api.prod.whoop.com/oauth/oauth2/token', form, {
