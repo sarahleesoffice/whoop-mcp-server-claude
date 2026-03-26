@@ -11,7 +11,7 @@ import { WhoopApiConfig } from './dist/types.js';
 dotenv.config();
 
 // Validate required environment variables
-const requiredEnvVars = ['WHOOP_CLIENT_ID', 'WHOOP_CLIENT_SECRET', 'WHOOP_REDIRECT_URI'];
+const requiredEnvVars = ['WHOOPCLIENTID', 'WHOOPCLIENTSECRET', 'WHOOPREDIRECTURI'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
@@ -22,9 +22,9 @@ if (missingVars.length > 0) {
 
 // Create WHOOP API configuration
 const config: WhoopApiConfig = {
-  clientId: process.env.WHOOP_CLIENT_ID!,
-  clientSecret: process.env.WHOOP_CLIENT_SECRET!,
-  redirectUri: process.env.WHOOP_REDIRECT_URI!,
+  clientId: process.env.WHOOPCLIENTID!,
+  clientSecret: process.env.WHOOPCLIENTSECRET!,
+  redirectUri: process.env.WHOOPREDIRECTURI!,
 };
 
 // Create and run the MCP server

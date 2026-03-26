@@ -3,9 +3,22 @@
   "functions": {
     "api/mcp.ts": {
       "maxDuration": 300
+    },
+    "api/index.ts": {
+      "maxDuration": 10
+    },
+    "api/auth/callback.ts": {
+      "maxDuration": 300
     }
   },
   "rewrites": [
-    { "source": "/mcp", "destination": "/api/mcp" }
+    {
+      "source": "/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/mcp",
+      "destination": "/api/mcp"
+    }
   ]
 }

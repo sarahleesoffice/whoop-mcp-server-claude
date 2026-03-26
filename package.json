@@ -13,10 +13,17 @@
     "dev": "tsx src/index.ts",
     "watch": "tsx watch src/index.ts",
     "test": "node dist/test.js",
-    "auth": "node auth-app.js",
-    "start-mcp": "node start-mcp-server.js"
+    "auth": "node src/auth-app.js",
+    "start-mcp": "node start-mcp-server.js",
+    "vercel-build": "npm run build"
   },
-  "keywords": ["mcp", "whoop", "api", "fitness", "health"],
+  "keywords": [
+    "mcp",
+    "whoop",
+    "api",
+    "fitness",
+    "health"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {

@@ -71,9 +71,9 @@ function createMcpServer() {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOP_CLIENT_ID');
-    const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOP_CLIENT_SECRET');
-    const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOP_REDIRECT_URI');
+    const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOPCLIENTID');
+    const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOPCLIENTSECRET');
+    const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOPREDIRECTURI');
 
     try {
       const api = buildWhoopClient(whoopAccessToken);
