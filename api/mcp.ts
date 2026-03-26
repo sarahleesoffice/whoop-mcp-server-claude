@@ -71,9 +71,9 @@ function createMcpServer() {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOPCLIENTID');
-    const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOPCLIENTSECRET');
-    const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOPREDIRECTURI');
+    const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOP_CLIENT_ID');
+    const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOP_CLIENT_SECRET');
+    const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOP_REDIRECT_URI');
 
     try {
       const api = buildWhoopClient(whoopAccessToken);
@@ -191,6 +191,15 @@ function createMcpServer() {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
+    const acceptHeader = String(req.headers.accept ?? '');
+    if (!acceptHeader.includes('text/event-stream')) {
+      return res.status(200).json({
+        ok: true,
+        service: 'whoop-mcp-server',
+        endpoint: '/mcp',
+      });
+    }
+
     const cookieToken = getWhoopAccessTokenFromCookie(req.headers.cookie);
     if (cookieToken) {
       whoopAccessToken = cookieToken;
