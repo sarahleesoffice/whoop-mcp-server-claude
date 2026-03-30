@@ -6,6 +6,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
+import { getLatestWhoopTokens, persistWhoopTokens } from './lib/whoop-tokens.js';
 
 // In-memory session store (shared across warm lambda instances)
 const transports = new Map<string, SSEServerTransport>();
@@ -46,6 +47,26 @@ function buildWhoopClient(accessToken?: string) {
 
 let whoopAccessToken: string | undefined = process.env.WHOOP_ACCESS_TOKEN;
 
+async function resolveWhoopAccessToken(cookieHeader?: string) {
+  if (whoopAccessToken) {
+    return whoopAccessToken;
+  }
+
+  const cookieToken = getWhoopAccessTokenFromCookie(cookieHeader);
+  if (cookieToken) {
+    whoopAccessToken = cookieToken;
+    return cookieToken;
+  }
+
+  const storedTokens = await getLatestWhoopTokens();
+  if (storedTokens?.access_token) {
+    whoopAccessToken = storedTokens.access_token;
+    return storedTokens.access_token;
+  }
+
+  return undefined;
+}
+
 function createMcpServer() {
   const server = new Server({ name: 'whoop-mcp-server', version: '1.0.0' });
 
@@ -76,6 +97,12 @@ function createMcpServer() {
     const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOP_REDIRECT_URI');
 
     try {
+      whoopAccessToken = await resolveWhoopAccessToken(
+        typeof request.params._meta?.['headers']?.cookie === 'string'
+          ? request.params._meta?.['headers']?.cookie
+          : undefined,
+      );
+
       const api = buildWhoopClient(whoopAccessToken);
 
       const paginate = (params?: Record<string, unknown>) => {
@@ -154,7 +181,28 @@ function createMcpServer() {
           const resp = await axios.post('https://api.prod.whoop.com/oauth/oauth2/token', form, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           });
-          return text(resp.data);
+
+          const tokenResponse = resp.data as {
+            access_token: string;
+            refresh_token?: string;
+            expires_in?: number;
+            token_type?: string;
+            scope?: string;
+          };
+          whoopAccessToken = tokenResponse.access_token;
+          try {
+            await persistWhoopTokens({
+              accessToken: tokenResponse.access_token,
+              refreshToken: tokenResponse.refresh_token ?? null,
+              tokenType: tokenResponse.token_type ?? null,
+              expiresIn: tokenResponse.expires_in ?? null,
+              scope: tokenResponse.scope ?? null,
+            });
+          } catch (persistError) {
+            console.warn('Failed to persist WHOOP tokens in Supabase after code exchange:', persistError);
+          }
+
+          return text(tokenResponse);
         }
 
         case 'whoop-refresh-token': {
@@ -166,7 +214,28 @@ function createMcpServer() {
           const resp = await axios.post('https://api.prod.whoop.com/oauth/oauth2/token', form, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           });
-          return text(resp.data);
+
+          const tokenResponse = resp.data as {
+            access_token: string;
+            refresh_token?: string;
+            expires_in?: number;
+            token_type?: string;
+            scope?: string;
+          };
+          whoopAccessToken = tokenResponse.access_token;
+          try {
+            await persistWhoopTokens({
+              accessToken: tokenResponse.access_token,
+              refreshToken: tokenResponse.refresh_token ?? String(args.refreshToken),
+              tokenType: tokenResponse.token_type ?? null,
+              expiresIn: tokenResponse.expires_in ?? null,
+              scope: tokenResponse.scope ?? null,
+            });
+          } catch (persistError) {
+            console.warn('Failed to persist WHOOP tokens in Supabase after refresh:', persistError);
+          }
+
+          return text(tokenResponse);
         }
 
         case 'whoop-set-access-token': {
@@ -203,6 +272,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cookieToken = getWhoopAccessTokenFromCookie(req.headers.cookie);
     if (cookieToken) {
       whoopAccessToken = cookieToken;
+    } else if (!whoopAccessToken) {
+      const storedTokens = await getLatestWhoopTokens();
+      if (storedTokens?.access_token) {
+        whoopAccessToken = storedTokens.access_token;
+      }
     }
 
     // Establish SSE connection
