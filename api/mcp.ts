@@ -47,15 +47,9 @@ function buildWhoopClient(accessToken?: string) {
 
 let whoopAccessToken: string | undefined = process.env.WHOOP_ACCESS_TOKEN;
 
-async function resolveWhoopAccessToken(cookieHeader?: string) {
+async function resolveWhoopAccessToken() {
   if (whoopAccessToken) {
     return whoopAccessToken;
-  }
-
-  const cookieToken = getWhoopAccessTokenFromCookie(cookieHeader);
-  if (cookieToken) {
-    whoopAccessToken = cookieToken;
-    return cookieToken;
   }
 
   const storedTokens = await getLatestWhoopTokens();
@@ -97,11 +91,7 @@ function createMcpServer() {
     const redirectUri = getWhoopEnv('WHOOPREDIRECTURI', 'WHOOP_REDIRECT_URI');
 
     try {
-      whoopAccessToken = await resolveWhoopAccessToken(
-        typeof request.params._meta?.['headers']?.cookie === 'string'
-          ? request.params._meta?.['headers']?.cookie
-          : undefined,
-      );
+      whoopAccessToken = await resolveWhoopAccessToken();
 
       const api = buildWhoopClient(whoopAccessToken);
 
