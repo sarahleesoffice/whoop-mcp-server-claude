@@ -17,6 +17,52 @@ function firstQueryValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function findStringFieldDeep(value: unknown, keys: string[]): string | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const current = record[key];
+    if (typeof current === 'string' && current.trim().length > 0) {
+      return current;
+    }
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findStringFieldDeep(nested, keys);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function findNumberFieldDeep(value: unknown, keys: string[]): number | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    const current = record[key];
+    if (typeof current === 'number' && Number.isFinite(current)) {
+      return current;
+    }
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findNumberFieldDeep(nested, keys);
+    if (found !== null) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
 function htmlPage(title: string, body: string) {
   return '<!doctype html>' +
     '<html><head><meta charset="utf-8" />' +
@@ -76,31 +122,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
-    const tokenResponse = response.data as Record<string, unknown>;
-    const accessToken = typeof tokenResponse.access_token === 'string'
-      ? tokenResponse.access_token
-      : typeof tokenResponse.accessToken === 'string'
-        ? tokenResponse.accessToken
-        : null;
-    const refreshToken = typeof tokenResponse.refresh_token === 'string'
-      ? tokenResponse.refresh_token
-      : typeof tokenResponse.refreshToken === 'string'
-        ? tokenResponse.refreshToken
-        : null;
-    const tokenType = typeof tokenResponse.token_type === 'string'
-      ? tokenResponse.token_type
-      : typeof tokenResponse.tokenType === 'string'
-        ? tokenResponse.tokenType
-        : null;
-    const expiresInValue = typeof tokenResponse.expires_in === 'number'
-      ? tokenResponse.expires_in
-      : typeof tokenResponse.expiresIn === 'number'
-        ? tokenResponse.expiresIn
-        : null;
-    const scope = typeof tokenResponse.scope === 'string' ? tokenResponse.scope : null;
+    const tokenResponse = response.data as unknown;
+    console.log('WHOOP token exchange raw response:', JSON.stringify(tokenResponse));
+
+    const accessToken = findStringFieldDeep(tokenResponse, ['access_token', 'accessToken']);
+    const refreshToken = findStringFieldDeep(tokenResponse, ['refresh_token', 'refreshToken']);
+    const tokenType = findStringFieldDeep(tokenResponse, ['token_type', 'tokenType']);
+    const expiresInValue = findNumberFieldDeep(tokenResponse, ['expires_in', 'expiresIn']);
+    const scope = findStringFieldDeep(tokenResponse, ['scope']);
 
     if (!accessToken) {
       throw new Error('WHOOP token response did not include an access token');
+    }
+
+    if (!refreshToken) {
+      console.warn('WHOOP token response did not include a refresh token');
     }
 
     let persistenceStatus = 'Supabase persistence unavailable';
