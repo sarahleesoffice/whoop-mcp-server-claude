@@ -143,7 +143,8 @@ export class WhoopApiClient {
       redirect_uri: this.config.redirectUri,
       response_type: 'code',
       scope: 'read:recovery read:cycles read:workout read:sleep read:profile read:body_measurement',
-      prompt: 'consent'
+      prompt: 'consent',
+      access_type: 'offline'
     });
     
     if (state) {
