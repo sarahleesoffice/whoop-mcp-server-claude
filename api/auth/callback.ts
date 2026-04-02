@@ -76,22 +76,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
-    const tokenResponse = response.data as {
-      access_token: string;
-      refresh_token?: string;
-      token_type?: string;
-      expires_in?: number;
-      scope?: string;
-    };
+    const tokenResponse = response.data as Record<string, unknown>;
+    const accessToken = typeof tokenResponse.access_token === 'string'
+      ? tokenResponse.access_token
+      : typeof tokenResponse.accessToken === 'string'
+        ? tokenResponse.accessToken
+        : null;
+    const refreshToken = typeof tokenResponse.refresh_token === 'string'
+      ? tokenResponse.refresh_token
+      : typeof tokenResponse.refreshToken === 'string'
+        ? tokenResponse.refreshToken
+        : null;
+    const tokenType = typeof tokenResponse.token_type === 'string'
+      ? tokenResponse.token_type
+      : typeof tokenResponse.tokenType === 'string'
+        ? tokenResponse.tokenType
+        : null;
+    const expiresInValue = typeof tokenResponse.expires_in === 'number'
+      ? tokenResponse.expires_in
+      : typeof tokenResponse.expiresIn === 'number'
+        ? tokenResponse.expiresIn
+        : null;
+    const scope = typeof tokenResponse.scope === 'string' ? tokenResponse.scope : null;
+
+    if (!accessToken) {
+      throw new Error('WHOOP token response did not include an access token');
+    }
 
     let persistenceStatus = 'Supabase persistence unavailable';
     try {
       const persistence = await persistWhoopTokens({
-        accessToken: tokenResponse.access_token,
-        refreshToken: tokenResponse.refresh_token ?? null,
-        tokenType: tokenResponse.token_type ?? null,
-        expiresIn: tokenResponse.expires_in ?? null,
-        scope: tokenResponse.scope ?? null,
+        accessToken,
+        refreshToken,
+        tokenType,
+        expiresIn: expiresInValue,
+        scope,
       });
       persistenceStatus = persistence.persisted
         ? 'WHOOP tokens were stored in the whoop_tokens table in Supabase.'

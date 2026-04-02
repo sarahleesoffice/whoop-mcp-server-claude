@@ -69,10 +69,14 @@ export async function persistWhoopTokens(tokens: PersistWhoopTokensInput) {
   const existing = await getLatestWhoopTokens();
   const now = new Date().toISOString();
 
+  const normalizedRefreshToken = typeof tokens.refreshToken === 'string' && tokens.refreshToken.trim().length > 0
+    ? tokens.refreshToken
+    : existing?.refresh_token ?? null;
+
   const payload: WhoopTokenRecord = {
     id: DEFAULT_ROW_ID,
     access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken ?? existing?.refresh_token ?? null,
+    refresh_token: normalizedRefreshToken,
     token_type: tokens.tokenType ?? existing?.token_type ?? null,
     expires_in: typeof tokens.expiresIn === 'number' ? tokens.expiresIn : existing?.expires_in ?? null,
     scope: tokens.scope ?? existing?.scope ?? null,
