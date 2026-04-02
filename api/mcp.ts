@@ -6,10 +6,50 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
-import { getLatestWhoopTokens, persistWhoopTokens } from './lib/whoop-tokens.js';
+import { getLatestWhoopTokens, persistWhoopTokens, type WhoopTokenRecord } from './lib/whoop-tokens.js';
 
 // In-memory session store (shared across warm lambda instances)
 const transports = new Map<string, SSEServerTransport>();
+const WHOOP_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+let whoopTokenCache: WhoopTokenRecord | null = null;
+let whoopAccessToken: string | undefined = process.env.WHOOP_ACCESS_TOKEN;
+
+function getTokenExpiryMs(token: WhoopTokenRecord) {
+  if (!token.expires_in) {
+    return null;
+  }
+
+  const basis = token.updated_at ?? token.created_at;
+  if (!basis) {
+    return null;
+  }
+
+  const parsed = Date.parse(basis);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return parsed + token.expires_in * 1000;
+}
+
+function tokenNeedsRefresh(token: WhoopTokenRecord) {
+  const expiresAt = getTokenExpiryMs(token);
+  if (!expiresAt) {
+    return false;
+  }
+
+  return Date.now() >= (expiresAt - WHOOP_TOKEN_REFRESH_BUFFER_MS);
+}
+
+async function loadWhoopTokenRecord(forceRefresh = false) {
+  if (!forceRefresh && whoopTokenCache) {
+    return whoopTokenCache;
+  }
+
+  whoopTokenCache = await getLatestWhoopTokens();
+  return whoopTokenCache;
+}
 
 function getWhoopEnv(primaryName: string, fallbackName: string) {
   return process.env[primaryName] ?? process.env[fallbackName] ?? '';
@@ -38,24 +78,102 @@ function buildWhoopClient(accessToken?: string) {
     baseURL: 'https://api.prod.whoop.com/developer/v2',
     headers: { 'Content-Type': 'application/json' },
   });
+
   client.interceptors.request.use((cfg) => {
-    if (accessToken) cfg.headers!['Authorization'] = `Bearer ${accessToken}`;
+    const activeToken = accessToken ?? whoopAccessToken;
+    if (activeToken) {
+      const requestConfig = cfg as any;
+      requestConfig.headers = requestConfig.headers ?? {};
+      if (!requestConfig.headers.Authorization) {
+        requestConfig.headers.Authorization = `Bearer ${activeToken}`;
+      }
+    }
     return cfg;
   });
+
+  client.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const status = error?.response?.status;
+      const originalRequest = error?.config as (Record<string, unknown> & { __whoopRetry?: boolean }) | undefined;
+
+      if ((status === 401 || status === 403) && originalRequest && !originalRequest.__whoopRetry) {
+        originalRequest.__whoopRetry = true;
+        const refreshedToken = await refreshWhoopAccessToken();
+        originalRequest.headers = originalRequest.headers ?? {};
+        (originalRequest.headers as any).Authorization = `Bearer ${refreshedToken}`;
+        return client.request(originalRequest as any);
+      }
+
+      return Promise.reject(error);
+    },
+  );
+
   return client;
 }
 
-let whoopAccessToken: string | undefined = process.env.WHOOP_ACCESS_TOKEN;
+async function refreshWhoopAccessToken() {
+  const clientId = getWhoopEnv('WHOOPCLIENTID', 'WHOOP_CLIENT_ID');
+  const clientSecret = getWhoopEnv('WHOOPCLIENTSECRET', 'WHOOP_CLIENT_SECRET');
 
-async function resolveWhoopAccessToken() {
-  if (whoopAccessToken) {
-    return whoopAccessToken;
+  if (!clientId || !clientSecret) {
+    throw new Error('WHOOP OAuth client credentials are missing from the environment');
   }
 
-  const storedTokens = await getLatestWhoopTokens();
+  const storedTokens = await loadWhoopTokenRecord(true);
+  const refreshToken = storedTokens?.refresh_token;
+
+  if (!refreshToken) {
+    throw new Error('WHOOP refresh token is missing in Supabase. Sarah needs to re-authenticate once so the token can be stored and refreshed automatically.');
+  }
+
+  const form = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  });
+
+  const response = await axios.post('https://api.prod.whoop.com/oauth/oauth2/token', form, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+
+  const tokenResponse = response.data as {
+    access_token: string;
+    refresh_token?: string;
+    expires_in?: number;
+    token_type?: string;
+    scope?: string;
+  };
+
+  const persisted = await persistWhoopTokens({
+    accessToken: tokenResponse.access_token,
+    refreshToken: tokenResponse.refresh_token ?? refreshToken,
+    tokenType: tokenResponse.token_type ?? storedTokens?.token_type ?? null,
+    expiresIn: tokenResponse.expires_in ?? storedTokens?.expires_in ?? null,
+    scope: tokenResponse.scope ?? storedTokens?.scope ?? null,
+  });
+
+  whoopAccessToken = tokenResponse.access_token;
+  whoopTokenCache = persisted.persisted ? persisted.record : storedTokens;
+  return tokenResponse.access_token;
+}
+
+async function resolveWhoopAccessToken() {
+  const storedTokens = await loadWhoopTokenRecord();
+
   if (storedTokens?.access_token) {
     whoopAccessToken = storedTokens.access_token;
+
+    if (tokenNeedsRefresh(storedTokens) && storedTokens.refresh_token) {
+      return await refreshWhoopAccessToken();
+    }
+
     return storedTokens.access_token;
+  }
+
+  if (whoopAccessToken) {
+    return whoopAccessToken;
   }
 
   return undefined;

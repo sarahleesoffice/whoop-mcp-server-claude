@@ -66,14 +66,17 @@ export async function persistWhoopTokens(tokens: PersistWhoopTokensInput) {
     };
   }
 
+  const existing = await getLatestWhoopTokens();
+  const now = new Date().toISOString();
+
   const payload: WhoopTokenRecord = {
     id: DEFAULT_ROW_ID,
     access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken ?? null,
-    token_type: tokens.tokenType ?? null,
-    expires_in: typeof tokens.expiresIn === 'number' ? tokens.expiresIn : null,
-    scope: tokens.scope ?? null,
-    updated_at: new Date().toISOString(),
+    refresh_token: tokens.refreshToken ?? existing?.refresh_token ?? null,
+    token_type: tokens.tokenType ?? existing?.token_type ?? null,
+    expires_in: typeof tokens.expiresIn === 'number' ? tokens.expiresIn : existing?.expires_in ?? null,
+    scope: tokens.scope ?? existing?.scope ?? null,
+    updated_at: now,
   };
 
   const { data, error } = await supabase
